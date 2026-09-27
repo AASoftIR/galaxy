@@ -1,0 +1,16 @@
+{
+  "name": "galaxy-showcase",
+  "version": "1.0.0",
+  "description": "Interactive 3D Cosmic Observatory - Explore the universe in your browser",
+  "scripts": {
+    "start": "npx serve . -l 8080",
+    "dev": "npx serve . -l 8080",
+    "lint": "npx htmlhint *.html",
+    "deploy": "git add . && git commit -m \"Deploy\" && git push -u origin main"
+  },
+  "keywords": ["threejs", "webgl", "space", "galaxy", "celestial", "interactive", "3d"],
+  "author": "AASoftIR",
+  "license": "MIT",
+  "repository": "https://github.com/AASoftIR/galaxy",
+  "homepage": "https://aasoftir.github.io/galaxy/"
+}

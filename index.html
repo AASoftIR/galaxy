@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Interactive 3D Cosmic Observatory - Explore the universe in your browser" />
+  <title>Stellar Nexus - Interactive 3D Universe Explorer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { background: #020108; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #e2e8f0; }
+    #viewport { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+    #hud-overlay { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; padding: 24px; }
+    .hud-element { pointer-events: auto; background: rgba(8, 12, 28, 0.72); border: 1px solid rgba(56, 189, 248, 0.28); border-radius: 12px; backdrop-filter: blur(12px); box-shadow: 0 0 35px rgba(2, 132, 199, 0.15); }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 14px 22px; }
+    .brand-title { font-size: 20px; font-weight: 800; letter-spacing: 4px; background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; }
+    .nav-controls { display: flex; gap: 12px; align-items: center; }
+    select, button { background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.35); color: #7dd3fc; padding: 8px 16px; border-radius: 6px; font-size: 13px; letter-spacing: 1px; cursor: pointer; outline: none; transition: all 0.25s ease; }
+    select:hover, button:hover { border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); color: #ffffff; }
+    #info-panel { position: absolute; right: 24px; top: 90px; width: 380px; padding: 24px; display: none; animation: fadeIn 0.3s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    .panel-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 10px; margin-bottom: 14px; }
+    .object-name { font-size: 24px; font-weight: 800; color: #f8fafc; letter-spacing: 1px; }
+    .object-type { font-size: 11px; color: #38bdf8; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }
+    .spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .spec-card { background: rgba(15, 23, 42, 0.55); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05); }
+    .spec-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+    .spec-val { font-size: 13px; font-weight: 600; color: #e2e8f0; margin-top: 3px; }
+    .object-bio { font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-bottom: 16px; }
+    .btn-warp { width: 100%; background: linear-gradient(90deg, #0284c7, #6366f1); color: #ffffff; border: none; font-weight: 700; padding: 10px; }
+    .bottom-bar { align-self: center; padding: 8px 24px; font-size: 12px; color: #94a3b8; letter-spacing: 1.5px; display: flex; gap: 24px; }
+    .key-hint { color: #38bdf8; font-weight: 700; }
+    #tooltip { position: absolute; background: rgba(2, 6, 23, 0.88); border: 1px solid #38bdf8; padding: 6px 14px; border-radius: 4px; font-size: 12px; letter-spacing: 1px; color: #38bdf8; pointer-events: none; opacity: 0; transform: translate(-50%, -140%); transition: opacity 0.15s ease; z-index: 100; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="hud-overlay">
+    <div class="top-bar hud-element">
+      <div class="brand-title">Stellar Nexus</div>
+      <div class="nav-controls">
+        <select id="teleport-select">
+          <option value="" disabled selected>Navigate Destination...</option>
+          <optgroup label="Galaxies & Centers">
+            <option value="sgr_a">Milky Way Center (Sagittarius A*)</option>
+            <option value="andromeda">Andromeda Galaxy (M31)</option>
+            <option value="triangulum">Triangulum Galaxy (M33)</option>
+            <option value="sombrero">Sombrero Galaxy (M104)</option>
+            <option value="whirlpool">Whirlpool Galaxy (M51)</option>
+            <option value="pinwheel">Pinwheel Galaxy (M101)</option>
+          </optgroup>
+          <optgroup label="Stellar Nurseries & Relics">
+            <option value="pillars">Pillars of Creation (Eagle Nebula)</option>
+            <option value="orion_neb">Orion Nebula (M42)</option>
+            <option value="crab_neb">Crab Nebula (M1)</option>
+            <option value="vega_neb">Veil Nebula (Cygnus Loop)</option>
+            <option value="helix_neb">Helix Nebula (NGC 7293)</option>
+          </optgroup>
+          <optgroup label="Solar System">
+            <option value="sol">The Sun (Solar Origin)</option>
+            <option value="earth">Earth (Blue Planet)</option>
+            <option value="jupiter">Jupiter (Gas Giant)</option>
+            <option value="saturn">Saturn (Ringed Wonder)</option>
+            <option value="mars">Mars (Red Planet)</option>
+          </optgroup>
+          <optgroup label="Famous Stars">
+            <option value="sirius">Sirius A / B (Dog Star)</option>
+            <option value="betelgeuse">Betelgeuse (Red Supergiant)</option>
+            <option value="rigel">Rigel (Blue Supergiant)</option>
+            <option value="vy_cma">VY Canis Majoris (Hypergiant)</option>
+            <option value="polaris">Polaris (North Star)</option>
+          </optgroup>
+        </select>
+        <button id="btn-orbit-mode">ORBIT MODE: FREE</button>
+        <button id="btn-audio">AUDIO: OFF</button>
+        <button id="btn-reset">RESET VIEW</button>
+      </div>
+    </div>
+    <div id="info-panel" class="hud-element">
+      <div class="panel-header">
+        <div>
+          <h2 id="info-title" class="object-name">Celestial Body</h2>
+          <div id="info-type" class="object-type">Classification</div>
+        </div>
+        <button id="btn-close-panel" style="padding: 2px 8px;">X</button>
+      </div>
+      <div class="spec-grid">
+        <div class="spec-card"><div class="spec-label">Distance from Earth</div><div id="spec-dist" class="spec-val">-</div></div>
+        <div class="spec-card"><div class="spec-label">Constellation</div><div id="spec-const" class="spec-val">-</div></div>
+        <div class="spec-card"><div class="spec-label">Mass / Solar Equiv.</div><div id="spec-mass" class="spec-val">-</div></div>
+        <div class="spec-card"><div class="spec-label">Diameter / Radius</div><div id="spec-size" class="spec-val">-</div></div>
+      </div>
+      <p id="info-desc" class="object-bio"></p>
+      <button id="btn-orbit" class="btn-warp">ENGAGE CLOSE ORBIT</button>
+    </div>
+
+    <div class="bottom-bar hud-element">
+      <div><span class="key-hint">DRAG</span> Orbit / Rotate</div>
+      <div><span class="key-hint">RIGHT-CLICK DRAG</span> Pan Space</div>
+      <div><span class="key-hint">SCROLL</span> Hyperspace Zoom</div>
+      <div><span class="key-hint">CLICK</span> Inspect Celestial Object</div>
+      <div><span class="key-hint">SHIFT + CLICK</span> Toggle Constellation</div>
+    </div>
+  </div>
+
+  <div id="tooltip"></div>
+  <canvas id="viewport"></canvas>
+
+  <script>
+    const ASTRONOMICAL_DATA = {
+      sgr_a: {
+        name: "Sagittarius A*", type: "Supermassive Black Hole",
+        dist: "26,673 Light Years", constellation: "Sagittarius",
+        mass: "4.15 Million M☉", size: "44 Million km (Event Horizon)",
+        desc: "The gravitationally bound anchor of the Milky Way. This gravitational titan spins at near light-speed, warping spacetime and anchoring 400 billion orbiting stars.",
+        pos: new THREE.Vector3(0, 0, 0), cameraDist: 28, color: 0xffaa44
+      },
+      sol: {
+        name: "The Sun (Sol)", type: "Yellow Dwarf Star (G2V)",
+        dist: "0.0000158 ly (1 AU)", constellation: "None (Zodiac Path)",
+        mass: "1.00 M☉ (1.989 × 10³⁰ kg)", size: "1,392,700 km",
+        desc: "The gravitational epicenter of our solar system. Sol converts 600 million tons of hydrogen into helium every second via nuclear fusion.",
+        pos: new THREE.Vector3(120, 8, 90), cameraDist: 10, color: 0xffd54f
+      },
+      earth: {
+        name: "Earth", type: "Terrestrial Planet",
+        dist: "0 Light Years (Origin)", constellation: "None (Solar System)",
+        mass: "1.00 M⊕", size: "12,742 km (Diameter)",
+        desc: "The only known celestial body to support life. Third planet from the Sun, covered in 71% water with a nitrogen-oxygen atmosphere.",
+        pos: new THREE.Vector3(140, 10, 100), cameraDist: 5, color: 0x2196f3
+      },
+      jupiter: {
+        name: "Jupiter", type: "Gas Giant Planet",
+        dist: "5.2 Light Hours", constellation: "None (Solar System)",
+        mass: "317.8 M⊕", size: "139,822 km (Diameter)",
+        desc: "The largest planet in our solar system, a gas giant with 79 known moons. Its Great Red Spot is a storm that's been raging for centuries.",
+        pos: new THREE.Vector3(180, 5, 85), cameraDist: 12, color: 0xff9800
+      },
+      saturn: {
+        name: "Saturn", type: "Gas Giant Planet (Ringed)",
+        dist: "9.5 Light Hours", constellation: "None (Solar System)",
+        mass: "95.2 M⊕", size: "116,460 km (Diameter)",
+        desc: "Known for its spectacular ring system composed of ice and rock particles. Second-largest planet in our solar system.",
+        pos: new THREE.Vector3(210, 2, 75), cameraDist: 14, color: 0xf4d03f
+      },
+      mars: {
+        name: "Mars", type: "Terrestrial Planet (Red)",
+        dist: "3 Light Minutes", constellation: "None (Solar System)",
+        mass: "0.107 M⊕", size: "6,779 km (Diameter)",
+        desc: "The Red Planet, with a thin atmosphere and polar ice caps. Prime candidate for future human exploration and potential microbial life.",
+        pos: new THREE.Vector3(160, 6, 110), cameraDist: 8, color: 0xff4500
+      },
+      sirius: {
+        name: "Sirius A (Alpha CMa)", type: "Main-Sequence Star (A1V)",
+        dist: "8.60 Light Years", constellation: "Canis Major",
+        mass: "2.06 M☉", size: "2.4 Million km (1.71 R☉)",
+        desc: "The brightest star in Earth's night sky. Sirius is orbited by Sirius B, a faint white dwarf neutron star.",
+        pos: new THREE.Vector3(135, 12, 80), cameraDist: 12, color: 0x90caf9
+      },
+      betelgeuse: {
+        name: "Betelgeuse (Alpha Orionis)", type: "Red Supergiant (M1-2)",
+        dist: "642.5 Light Years", constellation: "Orion",
+        mass: "16.5–19 M☉", size: "1.06 Billion km (764 R☉)",
+        desc: "A gargantuan dying red supergiant on the verge of core collapse into a Type II supernova. Would engulf Jupiter if at our Sun's position.",
+        pos: new THREE.Vector3(175, 45, 140), cameraDist: 35, color: 0xff4500
+      },
+      rigel: {
+        name: "Rigel (Beta Orionis)", type: "Blue-White Supergiant (B8Ia)",
+        dist: "860 Light Years", constellation: "Orion",
+        mass: "21 M☉", size: "109 Million km (78.9 R☉)",
+        desc: "A luminous blue supergiant radiating 120,000 times solar output. Surface temp of 12,100K, will go supernova soon.",
+        pos: new THREE.Vector3(190, -35, 160), cameraDist: 22, color: 0x81d4fa
+      },
+      vy_cma: {
+        name: "VY Canis Majoris", type: "Extreme Red Hypergiant",
+        dist: "3,840 Light Years", constellation: "Canis Major",
+        mass: "17 ± 8 M☉", size: "1.97 Billion km (1,420 R☉)",
+        desc: "One of the most colossal known stars. Photons take over 6 hours to circumnavigate its convective perimeter.",
+        pos: new THREE.Vector3(260, 20, 190), cameraDist: 50, color: 0xff3b00
+      },
+      polaris: {
+        name: "Polaris (North Star)", type: "Cepheid Variable Supergiant",
+        dist: "433 Light Years", constellation: "Ursa Minor",
+        mass: "4.5 M☉", size: "230 Million km (32 R☉)",
+        desc: "Earth's current northern pole star. A Cepheid variable that pulsates, making it a crucial cosmic distance marker.",
+        pos: new THREE.Vector3(-45, 78, 200), cameraDist: 18, color: 0xffe082
+      },
+      pillars: {
+        name: "Pillars of Creation", type: "Interstellar Gas Columns",
+        dist: "6,500 Light Years", constellation: "Serpens (M16)",
+        mass: "~200 M☉ (Dust/Gas)", size: "4–5 Light Years Long",
+        desc: "Towering columns of cold molecular hydrogen gas and cosmic dust within the Eagle Nebula. Sculpted by fierce UV stellar winds.",
+        pos: new THREE.Vector3(45, 15, -60), cameraDist: 25, color: 0x2dd4bf
+      },
+      orion_neb: {
+        name: "Orion Nebula (M42)", type: "Diffraction Nebula",
+        dist: "1,344 Light Years", constellation: "Orion",
+        mass: "2,000 M☉", size: "24 Light Years Across",
+        desc: "The closest massive star-forming region. Heated by the Trapezium Cluster, it's a testbed for protoplanetary disk formation.",
+        pos: new THREE.Vector3(180, 5, 150), cameraDist: 30, color: 0xd946ef
+      },
+      crab_neb: {
+        name: "Crab Nebula (M1)", type: "Supernova Remnant",
+        dist: "6,500 Light Years", constellation: "Taurus",
+        mass: "4.6 ± 1.8 M☉", size: "11 Light Years Across",
+        desc: "Remnant of SN 1054 supernova. At its core, a neutron star spins 30x/sec emitting relativistic gamma-ray jets.",
+        pos: new THREE.Vector3(220, -15, -40), cameraDist: 22, color: 0x38bdf8
+      },
+      vega_neb: {
+        name: "Veil Nebula (Cygnus Loop)", type: "Supernova Remnant (Shell)",
+        dist: "2,400 Light Years", constellation: "Cygnus",
+        mass: "~5 M☉ (Ejecta)", size: "100 Light Years (Filaments)",
+        desc: "A vast, glowing cloud of ionized gas from the explosion of a supernova that occurred 10,000 years ago. A cosmic shock wave expanding at 500 km/s.",
+        pos: new THREE.Vector3(-310, 90, -180), cameraDist: 45, color: 0x60a5fa
+      },
+      helix_neb: {
+        name: "Helix Nebula (NGC 7293)", type: "Planetary Nebula (Eye of God)",
+        dist: "414 Light Years", constellation: "Aquarius",
+        mass: "0.3 M☉ (Central Star)", size: "25 Light Years (Diameter)",
+        desc: "One of the closest and largest planetary nebulae. A dying Sun-like star shedding its outer layers into space.",
+        pos: new THREE.Vector3(280, -60, -110), cameraDist: 28, color: 0x10b981
+      },
+      andromeda: {
+        name: "Andromeda Galaxy (M31)", type: "Barred Spiral Galaxy (SA(s)b)",
+        dist: "2.537 Million Light Years", constellation: "Andromeda",
+        mass: "1.5 Trillion M☉", size: "220,000 Light Years (Diameter)",
+        desc: "Largest spiral in the Local Group with ~1 trillion stars. Approaching Milky Way, will merge in ~4.5 billion years.",
+        pos: new THREE.Vector3(-650, 280, -700), cameraDist: 180, color: 0xc4b5fd
+      },
+      triangulum: {
+        name: "Triangulum Galaxy (M33)", type: "Spiral Galaxy (SA(s)cd)",
+        dist: "2.73 Million Light Years", constellation: "Triangulum",
+        mass: "50 Billion M☉", size: "60,000 Light Years (Diameter)",
+        desc: "Third-largest Local Group galaxy with rapid star formation and vast H II regions outshining those of Milky Way.",
+        pos: new THREE.Vector3(-850, 160, -500), cameraDist: 110, color: 0x38bdf8
+      },
+      sombrero: {
+        name: "Sombrero Galaxy (M104)", type: "Unbarred Spiral / Lenticular",
+        dist: "31.1 Million Light Years", constellation: "Virgo",
+        mass: "800 Billion M☉", size: "50,000 Light Years (Diameter)",
+        desc: "Famous for its bulbous white nucleus and prominent dust lanes. Harbors a 1 billion solar mass black hole.",
+        pos: new THREE.Vector3(750, 420, -850), cameraDist: 140, color: 0xfef08a
+      },
+      whirlpool: {
+        name: "Whirlpool Galaxy (M51)", type: "Grand Design Spiral (SA(s)bc)",
+        dist: "23 Million Light Years", constellation: "Canes Venatici",
+        mass: "840 Billion M☉", size: "60,000 Light Years (Diameter)",
+        desc: "Classic grand-design spiral interacting with companion galaxy NGC 5195. First spiral nebula classified by Lord Rosse.",
+        pos: new THREE.Vector3(1000, -300, -650), cameraDist: 150, color: 0xffc107
+      },
+      pinwheel: {
+        name: "Pinwheel Galaxy (M101)", type: "Spiral Galaxy (SAc(s)cd)",
+        dist: "21.6 Million Light Years", constellation: "Ursa Major",
+        mass: "1 Trillion M☉", size: "60,000 Light Years (Diameter)",
+        desc: "Face-on spiral nearly 3x the Milky Way's diameter. Contains giant H II regions and over 1 trillion stars.",
+        pos: new THREE.Vector3(-900, -250, 550), cameraDist: 160, color: 0x22c55e
+      }
+    };
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let orbitMode = 'free';
+    let orbitTarget = null;
+    let isTransitioning = false;
+    let flightStart = 0;
+    const flightDuration = 1800;
+    const camOrigin = new THREE.Vector3();
+    const camDest = new THREE.Vector3();
+    const targetOrigin = new THREE.Vector3();
+    const targetDest = new THREE.Vector3();
+    let currentSelectedKey = null;
+    let constellations = [];
+
+    function toggleAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const baseFreqs = [55, 110, 164.81, 220];
+        baseFreqs.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          const panner = audioCtx.createStereoPanner();
+          osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          setInterval(() => {
+            if (audioCtx.state === 'running') {
+              osc.frequency.setTargetAtTime(freq + (Math.random() - 0.5) * 1.5, audioCtx.currentTime, 3);
+            }
+          }, 3000);
+          gain.gain.setValueAtTime(0.04 / (idx + 1), audioCtx.currentTime);
+          panner.pan.setValueAtTime((idx / baseFreqs.length) * 2 - 1, audioCtx.currentTime);
+          osc.connect(gain); gain.connect(panner); panner.connect(audioCtx.destination);
+          osc.start();
+        });
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      isAudioPlaying = !isAudioPlaying;
+      if (!isAudioPlaying) audioCtx.suspend();
+      document.getElementById('btn-audio').innerText = `AUDIO: ${isAudioPlaying ? 'ON' : 'OFF'}`;
+    }
+
+    function toggleOrbitMode() {
+      orbitMode = orbitMode === 'free' ? 'locked' : 'free';
+      document.getElementById('btn-orbit-mode').innerText = `ORBIT MODE: ${orbitMode.toUpperCase()}`;
+      if (orbitMode === 'free') {
+        controls.enableRotate = true;
+        orbitTarget = null;
+      } else {
+        controls.enableRotate = !orbitTarget;
+      }
+    }
+
+    const canvas = document.getElementById('viewport');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020108, 0.0006);
+    scene.background = new THREE.Color(0x020108);
+
+    // Enhanced starfield background
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 5000;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i++) {
+      starPositions[i] = (Math.random() - 0.5) * 8000;
+    }
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, transparent: true, opacity: 0.85 });
+    const starField = new THREE.Points(starGeometry, starMaterial);
+    scene.add(starField);
+
+    // Distant galaxies background
+    for (let i = 0; i < 200; i++) {
+      const galaxyGeo = new THREE.IcosahedronGeometry(1, 0);
+      const galaxyMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(Math.random() * 0.2 + 0.6, 0.6, 0.55),
+        transparent: true, opacity: 0.12
+      });
+      const galaxy = new THREE.Mesh(galaxyGeo, galaxyMat);
+      galaxy.position.set(
+        (Math.random() - 0.5) * 6000,
+        (Math.random() - 0.5) * 4000,
+        (Math.random() - 0.5) * 6000
+      );
+      galaxy.scale.setScalar(Math.random() * 5 + 3);
+      scene.add(galaxy);
+    }
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.5, 8000);
+    camera.position.set(240, 210, 320);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxDistance = 2500;
+    controls.minDistance = 2;
+
+    // Enhanced galaxy generator with nebula effect
+    function createGalaxy(particleCount, radius, arms, spin, coreColor, outerColor, centerOffset) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const colors = new Float32Array(particleCount * 3);
+      const colorInside = new THREE.Color(coreColor);
+      const colorOutside = new THREE.Color(outerColor);
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        const r = Math.pow(Math.random(), 2.2) * radius;
+        const armAngle = ((i % arms) * 2 * Math.PI) / arms;
+        const spinAngle = r * spin;
+        const randomX = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 0.3) * r;
+        const randomY = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 0.18) * r;
+        const randomZ = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 0.3) * r;
+        positions[i3] = centerOffset.x + Math.cos(armAngle + spinAngle) * r + randomX;
+        positions[i3 + 1] = centerOffset.y + randomY;
+        positions[i3 + 2] = centerOffset.z + Math.sin(armAngle + spinAngle) * r + randomZ;
+        const mixedColor = colorInside.clone().lerp(colorOutside, r / radius);
+        colors[i3] = mixedColor.r; colors[i3 + 1] = mixedColor.g; colors[i3 + 2] = mixedColor.b;
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      const canvasTex = document.createElement('canvas');
+      canvasTex.width = 64; canvasTex.height = 64;
+      const ctx = canvasTex.getContext('2d');
+      const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.25, 'rgba(255,255,255,0.8)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
+      const texture = new THREE.CanvasTexture(canvasTex);
+      const material = new THREE.PointsMaterial({
+        size: 2.5, sizeAttenuation: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, vertexColors: true,
+        map: texture, transparent: true
+      });
+      return new THREE.Points(geometry, material);
+    }
+    // Spawn Milky Way with nebula overlay
+    const milkyWay = createGalaxy(120000, 380, 4, 0.014, 0xffe8bb, 0x38bdf8, new THREE.Vector3(0, 0, 0));
+    scene.add(milkyWay);
+
+    const andromedaMesh = createGalaxy(60000, 280, 2, 0.016, 0xffd1ff, 0x818cf8, ASTRONOMICAL_DATA.andromeda.pos);
+    andromedaMesh.rotation.x = 0.45; andromedaMesh.rotation.z = -0.3;
+    scene.add(andromedaMesh);
+
+    const triangulumMesh = createGalaxy(25000, 140, 2, 0.018, 0xdcfce7, 0x38bdf8, ASTRONOMICAL_DATA.triangulum.pos);
+    scene.add(triangulumMesh);
+
+    // Additional galaxies
+    const whirlpoolGalaxy = createGalaxy(35000, 180, 2, 0.015, 0xffecb3, 0xfb9246, ASTRONOMICAL_DATA.whirlpool.pos);
+    whirlpoolGalaxy.rotation.x = -0.6; whirlpoolGalaxy.rotation.z = 0.9;
+    scene.add(whirlpoolGalaxy);
+
+    const pinwheelGalaxy = createGalaxy(40000, 160, 3, 0.013, 0xaaffb3, 0x60e696, ASTRONOMICAL_DATA.pinwheel.pos);
+    pinwheelGalaxy.rotation.x = 0.2; pinwheelGalaxy.rotation.z = 0.5;
+    scene.add(pinwheelGalaxy);
+
+    // Nebula effect: volumetric particle clouds for interesting locations
+    function createNebula(center, count, radius, color) {
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        const phi = Math.random() * Math.PI * 2;
+        const theta = Math.random() * Math.PI;
+        const r = Math.pow(Math.random(), 0.7) * radius;
+        positions[i3] = center.x + Math.sin(theta) * Math.cos(phi) * r;
+        positions[i3 + 1] = center.y + Math.sin(theta) * Math.sin(phi) * r;
+        positions[i3 + 2] = center.z + Math.cos(theta) * r;
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        size: 4, sizeAttenuation: true, transparent: true, opacity: 0.5,
+        color: color, blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      return new THREE.Points(geo, mat);
+    }
+
+    // Add nebula clouds at key locations
+    scene.add(createNebula(ASTRONOMICAL_DATA.pillars.pos.clone(), 5000, 50, 0x2dd4bf));
+    scene.add(createNebula(ASTRONOMICAL_DATA.orion_neb.pos.clone(), 6000, 35, 0xd946ef));
+    scene.add(createNebula(ASTRONOMICAL_DATA.crab_neb.pos.clone(), 4000, 30, 0x38bdf8));
+    scene.add(createNebula(ASTRONOMICAL_DATA.vega_neb.pos.clone(), 7000, 80, 0x60a5fa));
+    scene.add(createNebula(ASTRONOMICAL_DATA.helix_neb.pos.clone(), 4500, 30, 0x10b981));
+
+    // Deep space star cluster for variety
+    const clusterGeo = new THREE.BufferGeometry();
+    const clusterPositions = new Float32Array(3000 * 3);
+    for (let i = 0; i < 3000 * 3; i += 3) {
+      const theta = Math.random() * Math.PI * 2;
+      const r = Math.pow(Math.random(), 2) * 30 + 5;
+      clusterPositions[i] = Math.cos(theta) * r + -50;
+      clusterPositions[i + 1] = (Math.random() - 0.5) * r * 0.4;
+      clusterPositions[i + 2] = Math.sin(theta) * r + 30;
+    }
+    clusterGeo.setAttribute('position', new THREE.BufferAttribute(clusterPositions, 3));
+    const cluster = new THREE.Points(clusterGeo, new THREE.PointsMaterial({
+      color: 0xffd54f, size: 1.5, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    scene.add(cluster);
+    // Ambient lighting for scene depth
+    const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+    scene.add(ambientLight);
+
+    // Celestial objects
+    const interactiveObjects = [];
+
+    // Sgr A* Black Hole
+    const sgrGroup = new THREE.Group();
+    const bhCore = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5, 64, 64),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.95 })
+    );
+    sgrGroup.add(bhCore);
+    const accretionGeo = new THREE.RingGeometry(4.2, 14.5, 128);
+    const accretionMat = new THREE.ShaderMaterial({
+      uniforms: {
+        color: { value: new THREE.Color(0xff8800) },
+        time: { value: 0 },
+        progress: { value: 0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform float time;
+        varying vec2 vUv;
+        void main() {
+          float d = distance(vUv, vec2(0.5));
+          float alpha = 0.5 * exp(-d * 10.0) + 0.3 * exp(-d * 30.0);
+          alpha *= 0.3 + 0.7 * sin(time * 3.0 + d * 50.0);
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      side: THREE.DoubleSide, transparent: true, depthWrite: false
+    });
+    const accretionDisk = new THREE.Mesh(accretionGeo, accretionMat);
+    accretionDisk.rotation.x = Math.PI / 2.3;
+    sgrGroup.add(accretionDisk);
+    sgrGroup.userData = { key: "sgr_a" };
+    scene.add(sgrGroup);
+    bhCore.userData = { key: "sgr_a" };
+
+    // Ray-sphere helper for black hole
+    const bhGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(5.8, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true, opacity: 0.15, side: THREE.BackSide })
+    );
+    sgrGroup.add(bhGlow);
+    interactiveObjects.push(bhCore);
+    // Helper: create glow material
+    function createGlowMesh(radius, color) {
+      const glowMat = new THREE.ShaderMaterial({
+        uniforms: { color: { value: new THREE.Color(color) }, },
+        vertexShader: `
+          varying vec3 vNormal;
+          void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+        `,
+        fragmentShader: `
+          uniform vec3 color;
+          varying vec3 vNormal;
+          void main() { float intensity = pow(0.6 - dot(vNormal, vec3(0, 0, 1)), 2.0); gl_FragColor = vec4(color * intensity, intensity * 0.8); }
+        `,
+        blending: THREE.AdditiveBlending, transparent: true, side: THREE.FrontSide
+      });
+      return new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 32), glowMat);
+    }
+
+    // Helper: create ring system (for Saturn)
+    function createRingSystem(inner, outer) {
+      const ringGeo = new THREE.RingGeometry(inner, outer, 128);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xf4d03f, transparent: true, opacity: 0.45, side: THREE.DoubleSide
+      });
+      return new THREE.Mesh(ringGeo, ringMat);
+    }
+
+    // Helper: create planet with atmospheric glow
+    function createPlanet(data, size = 1.2, innerSize = 2) {
+      const group = new THREE.Group();
+      group.position.copy(data.pos);
+
+      const sphereGeo = new THREE.SphereGeometry(size, 32, 32);
+      const sphereMat = new THREE.MeshBasicMaterial({ color: data.color });
+      const starMesh = new THREE.Mesh(sphereGeo, sphereMat);
+      starMesh.userData = { key: Object.keys(ASTRONOMICAL_DATA).find(k => ASTRONOMICAL_DATA[k] === data) };
+      group.add(starMesh);
+
+      // Glow ring for atmosphere effect
+      const glowGeo = new THREE.RingGeometry(size, innerSize, 32);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: data.color, side: THREE.DoubleSide, transparent: true, opacity: 0.4
+      });
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      group.add(glowMesh);
+
+      // Atmospheric glow
+      const atmosphere = createGlowMesh(size * 1.2, data.color);
+      group.add(atmosphere);
+
+      scene.add(group);
+      interactiveObjects.push(starMesh);
+      return group;
+    }
+
+    // Create all celestial objects
+    Object.keys(ASTRONOMICAL_DATA).forEach(key => {
+      if (key === 'sgr_a') return;
+      const data = ASTRONOMICAL_DATA[key];
+      const group = createPlanet(data);
+
+      // Special: Saturn rings
+      if (key === 'saturn') {
+        const rings = createRingSystem(1.5, 3);
+        rings.rotation.x = Math.PI / 2.3;
+        group.add(rings);
+      }
+    });
+    // Constellation lines (connecting celestial objects)
+    function createConstellationLine(objA, objB, color = 0x38bdf8) {
+      const geometry = new THREE.BufferGeometry().setFromPoints([objA.position, objB.position]);
+      const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.25 });
+      const line = new THREE.Line(geometry, material);
+      scene.add(line);
+      return line;
+    }
+
+    const objectGroups = {};
+    Object.keys(ASTRONOMICAL_DATA).forEach(key => {
+      objectGroups[key] = scene.getObjectByName(key) || ASTRONOMICAL_DATA[key].pos;
+    });
+
+    // Connect notable celestial objects with subtle constellation lines
+    const notableKeys = ['sirius', 'rigel', 'betelgeuse', 'polaris', 'sol'];
+    for (let i = 0; i < notableKeys.length; i++) {
+      const next = (i + 1) % notableKeys.length;
+      const a = ASTRONOMICAL_DATA[notableKeys[i]].pos;
+      const b = ASTRONOMICAL_DATA[notableKeys[next]].pos;
+      createConstellationLine({ position: a }, { position: b });
+    }
+
+    // Tooltip
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const tooltip = document.getElementById('tooltip');
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(interactiveObjects);
+      if (intersects.length > 0) {
+        const key = intersects[0].object.userData.key;
+        const data = ASTRONOMICAL_DATA[key];
+        tooltip.style.opacity = '1';
+        tooltip.style.left = `${e.clientX}px`;
+        tooltip.style.top = `${e.clientY}px`;
+        tooltip.innerText = `${data.name} [${data.type}]`;
+        document.body.style.cursor = 'pointer';
+      } else {
+        tooltip.style.opacity = '0';
+        document.body.style.cursor = 'default';
+      }
+    });
+
+    window.addEventListener('click', (e) => {
+      if (e.target.closest('.hud-element')) return;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(interactiveObjects);
+      if (intersects.length > 0) {
+        const key = intersects[0].object.userData.key;
+        travelTo(key);
+      }
+    });
+    function travelTo(key) {
+      const data = ASTRONOMICAL_DATA[key];
+      if (!data) return;
+      currentSelectedKey = key;
+      isTransitioning = true;
+      flightStart = performance.now();
+      camOrigin.copy(camera.position);
+      targetOrigin.copy(controls.target);
+      targetDest.copy(data.pos);
+      const offset = new THREE.Vector3(data.cameraDist * 0.7, data.cameraDist * 0.4, data.cameraDist).normalize().multiplyScalar(data.cameraDist);
+      camDest.copy(data.pos).add(offset);
+      showObjectInfo(key);
+    }
+
+    function showObjectInfo(key) {
+      const data = ASTRONOMICAL_DATA[key];
+      document.getElementById('info-title').innerText = data.name;
+      document.getElementById('info-type').innerText = data.type;
+      document.getElementById('spec-dist').innerText = data.dist;
+      document.getElementById('spec-const').innerText = data.constellation;
+      document.getElementById('spec-mass').innerText = data.mass;
+      document.getElementById('spec-size').innerText = data.size;
+      document.getElementById('info-desc').innerText = data.desc;
+      document.getElementById('info-panel').style.display = 'block';
+      document.getElementById('teleport-select').value = key;
+    }
+
+    // UI Event Listeners
+    document.getElementById('teleport-select').addEventListener('change', (e) => travelTo(e.target.value));
+    document.getElementById('btn-orbit').addEventListener('click', () => { if (currentSelectedKey) travelTo(currentSelectedKey); });
+    document.getElementById('btn-orbit-mode').addEventListener('click', toggleOrbitMode);
+    document.getElementById('btn-close-panel').addEventListener('click', () => {
+      document.getElementById('info-panel').style.display = 'none';
+    });
+    document.getElementById('btn-audio').addEventListener('click', toggleAudio);
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      isTransitioning = true;
+      flightStart = performance.now();
+      camOrigin.copy(camera.position);
+      targetOrigin.copy(controls.target);
+      targetDest.set(0, 0, 0);
+      camDest.set(240, 210, 320);
+      document.getElementById('info-panel').style.display = 'none';
+      document.getElementById('teleport-select').selectedIndex = 0;
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (e.key === ' ' && !isTransitioning) toggleOrbitMode();
+      if (e.key === 'Escape') document.getElementById('btn-reset').click();
+    });
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      // Rotate galaxies slowly
+      milkyWay.rotation.y = elapsed * 0.008;
+      andromedaMesh.rotation.y = -elapsed * 0.006;
+      triangulumMesh.rotation.y = elapsed * 0.004;
+      whirlpoolGalaxy.rotation.y = -elapsed * 0.005;
+      pinwheelGalaxy.rotation.y = elapsed * 0.003;
+
+      // Animate accretion disk shader
+      if (accretionMat.uniforms) accretionMat.uniforms.time.value = elapsed;
+
+      // Orbit mode: lock target on selected object
+      if (orbitMode === 'locked' && currentSelectedKey) {
+        const data = ASTRONOMICAL_DATA[currentSelectedKey];
+        targetDest.copy(data.pos);
+        controls.target.lerp(targetDest, 0.05);
+      }
+
+      // Billboard glow coronal rings
+      interactiveObjects.forEach(obj => {
+        if (obj.parent && obj.parent.children[1]) {
+          obj.parent.children[1].lookAt(camera.position);
+        }
+      });
+
+      // Camera flight transitions
+      if (isTransitioning) {
+        const t = Math.min((performance.now() - flightStart) / flightDuration, 1.0);
+        const ease = 1 - Math.pow(1 - t, 5);
+        camera.position.lerpVectors(camOrigin, camDest, ease);
+        controls.target.lerpVectors(targetOrigin, targetDest, ease);
+        if (t >= 1.0) isTransitioning = false;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+    window.scene = scene;
+  </script>
+</body>
+</html>
